@@ -1,0 +1,2087 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<title>Крестики-нолики</title>
+<meta charset='UTF-8'>
+<script src="lib/easeljs-NEXT.js"></script>
+<script src="lib/preloadjs-NEXT.js"></script>
+<script src="lib/tweenjs-NEXT.js"></script>
+<script src="lib/soundjs-NEXT.js"></script>
+
+<style>    
+    .htmllayer {
+    position: absolute; /* Абсолютное позиционирование */
+    top: 0px; /* Положение от нижнего края */
+    left: 0px; /* Положение от правого края */
+   }
+</style>
+
+<script type="text/javascript">
+
+/******************общие переменные*****************************/
+let stage; //основная сцена, содержащая все примитивы и объекты
+let canvas; //указатель на элемент HTML холст
+
+let Canvas_Scale = 1; //коэффициенты отличия ширины и высоты окна от изначальных после ресайза
+
+//ширина, высота холста
+let w = 1280;
+let h = 720;
+
+//////////////////////////////////////////глобальные переменные///////////////////////////////////////////////////////
+      
+let AllTextFont = 30;//размер шрифта всех надписей
+let QuadFieldSize = 647;
+let QuadFieldX = 317;
+let QuadFieldY = 60;
+let MinimalPlayersCount = 2;		//минимальное количество возможных игроков
+let CurrentQSequenceID = 0;	//индекс массива QuadSequenceArr, который показывает текущее разделение игрового поля на квадраты
+let StartGame = false;
+let PauseGame = false;
+let CompStepActive = false;
+let CurrentPlayerID = 0;
+let CompStepTimeoutID = 0;
+
+//объекты кнопок и текстовых полей
+let BtnClear = null;		//кнопка сброс
+let BtnAgain = null;		//кнопка еще раз
+let HelpNotesObj = null;	//диалог-подсказка
+let WhoseMoveTxt = null;	//текстовое поле отображающее чей ход следующий
+let PlayersArray = new Array(); //массив с настройками игрока и элементами, относящимися к этим настройкам
+let QuadSequenceArr = new Array();	//массив с объектами переключателей и настройками режимов разделения игрового поля на квадраты
+let CompIQLevelsArr = new Array();	//массив с уровнями IQ искусственного интеллекта
+let QuadricsArr = new Array(); //массив с объектами квадратов
+let NoteText = "Нажмите на кнопку \"Начать игру\"";
+
+let CashContainer, QuadricsContainer, ElementsContainer;	//контейнера со всеми элементами программы
+let Fone;		//графический объект с общим фоном
+let WinLine;		//объект с линией, которая показывает выигрышные квадраты и ее параметрами
+let TaskText, SetIQText;
+let HelpVideo; //объект, содержащий внешне подгружаемое видео с инструкцией к игре
+let GameHelp; // кнопка для запуска окна с видеоинструкцией к игре
+//цвета
+
+let MidIQIntermedData = new Array(); //массив, хранящий промежуточные результаты для ходов искусственного интеллекта
+MidIQIntermedData[0] = new Array();
+MidIQIntermedData[1] = new Array();
+MidIQIntermedData[2] = new Array();
+MidIQIntermedData[3] = new Array();
+
+let PossibleLineComb = new Array(); //массив с возможными комбинациями выигрышных линий фигур для компьютерного интеллекта
+let PossibleLineCombCopy = new Array();
+
+let ColorGreen01 = "#23ff23";
+let ColorGreen02 = "#00ae00";
+let ColorYellow01 = "#ffffcc";
+let ColorYellow02 = "#ffff00";
+
+/*******************************класс общей кнопки*********************************************/
+class ButtonCommon {
+  constructor(x,y,w,h,id,text,font,parentpt) { 
+    this.butX = x;
+    this.butY = y;
+    this.butW = w;
+    this.butH = h;
+    this.butID = id;
+    this.ParentPnt = parentpt;
+    this.MainObjContainer = new createjs.Container(); 
+    this.ButtonFone = new createjs.Shape();
+    this.TextFont = font;
+    this.TextBut = new createjs.Text(text, this.TextFont*Canvas_Scale+"px Arial", "#ff0000").set({textBaseline: "middle", textAlign: "center", x: (this.butX+this.butW/2)*Canvas_Scale, y: (this.butY+this.butH/2)*Canvas_Scale});;
+    this.MouseDownListener;
+    
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  if(this.ButtonFone == null)
+  {
+    alert("ButtonFone не был создан!");
+    return;
+  }
+  
+  this.MainObjContainer.removeAllChildren();
+  
+  this.ButtonFone.graphics.clear();  
+  this.ButtonFone.graphics.setStrokeStyle(3*Canvas_Scale).beginStroke("Black").beginRadialGradientFill([ColorGreen01, ColorGreen02],[0, 1], (this.butX+this.butW/2)*Canvas_Scale, (this.butY+this.butH/2)*Canvas_Scale, 0, (this.butX+this.butW/2)*Canvas_Scale, (this.butY+this.butH/2)*Canvas_Scale, this.butW/2*Canvas_Scale).drawRoundRect(this.butX*Canvas_Scale, this.butY*Canvas_Scale, this.butW*Canvas_Scale, this.butH*Canvas_Scale, this.butH/4*Canvas_Scale);  
+  this.TextBut.set({font: this.TextFont*Canvas_Scale+"px Arial", x: (this.butX+this.butW/2)*Canvas_Scale, y: (this.butY+this.butH/2)*Canvas_Scale});
+    
+  this.MainObjContainer.addChild(this.ButtonFone);
+  this.MainObjContainer.addChild(this.TextBut);
+ } 
+  
+ ListenersOn()
+ {
+  this.MouseDownListener = this.MainObjContainer.on('mousedown', this.OnButMouseDown, this);
+ }
+ 
+ ListenersOff()
+ {
+  this.MainObjContainer.off('mousedown', this.MouseDownListener);
+ }
+ 
+ OnButMouseDown()
+ {
+    this.ParentPnt.OnButtonCommonDown(this.butID);
+ }
+}
+
+/*******************************класс блоков с динамическим текстом*********************************************/
+class TextBox {
+  constructor(x,y,w,h,text,font,color) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjW = w;
+    this.ObjH = h;    
+    this.TextFont = font;
+    this.FoneColor = color;
+    this.MainObjContainer = new createjs.Container();
+    this.ObjFone = new createjs.Shape();
+    this.ObjText = new createjs.Text(text, ""+this.TextFont*Canvas_Scale+"px Arial", this.FoneColor).set({textAlign: "center", textBaseline: "middle", x: this.ObjW/2*Canvas_Scale, y: this.ObjH/2*Canvas_Scale});
+    
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  this.ObjFone.graphics.clear();
+  
+  this.ObjFone.graphics.setStrokeStyle(3*Canvas_Scale).beginStroke("Black").beginRadialGradientFill([ColorYellow01, ColorYellow02],[0, 1], (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, 0, (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, this.ObjW/2*Canvas_Scale).drawRoundRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale, this.ObjH/4*Canvas_Scale);  
+ 
+  this.ObjText.set({font: ""+this.TextFont*Canvas_Scale+"px Arial", x: (this.ObjX+this.ObjW/2)*Canvas_Scale, y: (this.ObjY+this.ObjH/2)*Canvas_Scale});
+  
+  this.MainObjContainer.addChild(this.ObjFone);
+  this.MainObjContainer.addChild(this.ObjText);
+ } 
+
+ OnSetText(text)
+ {
+  this.ObjText.text = text;
+ }
+}
+
+/*******************************класс текстовых блоков, выводящих количество побед*********************************************/
+class ResultDisplay {
+  constructor(x,y,w,h,text,font,color) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjW = w;
+    this.ObjH = h;    
+    this.TitleText = text;
+    this.TextFont = font;
+    this.RealResult = 0;
+    this.FoneColor = color;
+    this.MainObjContainer = new createjs.Container();
+    this.ObjFone = new createjs.Shape();
+    this.ObjText = new createjs.Text(this.TitleText+": "+this.RealResult, ""+this.TextFont*Canvas_Scale+"px Arial", this.FoneColor).set({textAlign: "center", textBaseline: "middle", x: this.ObjW/2*Canvas_Scale, y: this.ObjH/2*Canvas_Scale});
+    
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  this.ObjFone.graphics.clear();
+  
+  this.ObjFone.graphics.setStrokeStyle(3*Canvas_Scale).beginStroke("Black").beginRadialGradientFill([ColorYellow01, ColorYellow02],[0, 1], (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, 0, (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, this.ObjW/2*Canvas_Scale).drawRoundRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale, this.ObjH/4*Canvas_Scale);  
+ 
+  this.ObjText.set({font: ""+this.TextFont*Canvas_Scale+"px Arial", x: (this.ObjX+this.ObjW/2)*Canvas_Scale, y: (this.ObjY+this.ObjH/2)*Canvas_Scale});
+  
+  this.MainObjContainer.addChild(this.ObjFone);
+  this.MainObjContainer.addChild(this.ObjText);
+ } 
+
+ OnUpdateText()
+ {
+  this.ObjText.text = this.TitleText+": "+this.RealResult;
+  stage.update();
+ }
+ 
+ OnInitState()
+ {
+  this.RealResult = 0;
+  this.OnUpdateText();
+ }
+ 
+ SetRightAnsw()
+ {
+  this.DisplayAnswersNum(this.RealResult+1);  
+ }
+ 
+ DisplayAnswersNum(num)
+ {
+   this.RealResult = num;    
+   this.OnUpdateText();
+ }
+ 
+}
+
+/*******************************класс элемента радиопереключатель*********************************************/
+class RadioButton {
+  constructor(x,y,s,text,font,id,parentpt) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjSize = s;
+    this.ObjID = id;
+    this.TitleText = text;
+    this.TextFont = font;
+    this.ParentPnt = parentpt;
+    this.ObjBorder = 3;
+    this.MainObjContainer = new createjs.Container(); 
+    this.ButtonFone = new createjs.Shape();
+    this.ButtonSign = new createjs.Shape();
+    this.MouseDownListener;
+    this.StateOn = true;
+    this.ObjText = new createjs.Text(this.TitleText, ""+this.TextFont*Canvas_Scale+"px Arial", this.FoneColor).set({textAlign: "center", textBaseline: "top", x: (this.ObjX+this.ObjSize/2)*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+    
+    this.SetRadioOff();
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  if(this.ButtonFone == null)
+  {
+    alert("RadioButtonFone не был создан!");
+    return;
+  }
+  
+  if(this.ButtonSign == null)
+  {
+    alert("RadioButtonSign не был создан!");
+    return;
+  }
+  
+  this.MainObjContainer.removeAllChildren();
+  
+  this.ButtonFone.graphics.clear();
+  this.ButtonSign.graphics.clear();
+  
+  this.ObjText.set({font:this.TextFont*Canvas_Scale+"px Arial", x: (this.ObjX+this.ObjSize/2)*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+    
+  this.ButtonFone.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("#000000").beginFill(ColorGreen01).drawCircle((this.ObjX+this.ObjSize/2)*Canvas_Scale, (this.ObjY+this.TextFont+this.ObjSize/2+this.ObjBorder)*Canvas_Scale, this.ObjSize/2*Canvas_Scale);
+  this.ButtonSign.graphics.setStrokeStyle(0).beginFill("#000000").drawCircle((this.ObjX+this.ObjSize/2)*Canvas_Scale, (this.ObjY+this.TextFont+this.ObjSize/2+this.ObjBorder)*Canvas_Scale, this.ObjSize/4*Canvas_Scale);
+   
+  this.MainObjContainer.addChild(this.ObjText);
+  this.MainObjContainer.addChild(this.ButtonFone);
+  this.MainObjContainer.addChild(this.ButtonSign);
+ }  
+ 
+ ListenersOn()
+ {
+  this.MouseDownListener = this.MainObjContainer.on('mousedown', this.OnButMouseDown, this);
+ }
+ 
+ ListenersOff()
+ {
+  this.MainObjContainer.off('mousedown', this.MouseDownListener);
+ }
+ 
+ SetRadioOn()
+ {
+  this.StateOn = true;
+  this.ButtonSign.alpha = 1;
+ }
+ 
+ SetRadioOff()
+ {
+  this.StateOn = false;
+  this.ButtonSign.alpha = 0;
+ }
+ 
+ OnButMouseDown()
+ {
+    this.ParentPnt.SwitchRadio(this.ObjID);    
+ }
+}
+
+/*******************************класс элемента флажок*********************************************/
+class CheckButton {
+  constructor(x,y,s,text,font,id,parentpt) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjSize = s;
+    this.TitleText = text;
+    this.TextFont = font;
+    this.ObjID = id;
+    this.ParentPnt = parentpt;
+    this.ObjBorder = 3;
+    this.SignStrike = 7;
+    this.SignIndent = 10;
+    this.MainObjContainer = new createjs.Container(); 
+    this.ButtonFone = new createjs.Shape();
+    this.ButtonSign = new createjs.Shape();
+    this.MouseDownListener;
+    this.StateOn = false;
+    this.ObjText = new createjs.Text(this.TitleText, ""+this.TextFont*Canvas_Scale+"px Arial", this.FoneColor).set({textAlign: "center", textBaseline: "top", x: (this.ObjX+this.ObjSize/2)*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+    
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  if(this.ButtonFone == null)
+  {
+    alert("ButtonFone не был создан!");
+    return;
+  }
+  
+  if(this.ButtonSign == null)
+  {
+    alert("ButtonSign не был создан!");
+    return;
+  }
+  
+  this.MainObjContainer.removeAllChildren();
+  
+  this.ButtonFone.graphics.clear();
+  this.ButtonSign.graphics.clear();
+  
+  this.ObjText.set({font:this.TextFont*Canvas_Scale+"px Arial", x: (this.ObjX+this.ObjSize/2)*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+  
+  this.ButtonFone.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("#000000").beginFill(ColorGreen01).drawRect(this.ObjX*Canvas_Scale, (this.ObjY+this.TextFont+this.ObjBorder)*Canvas_Scale, this.ObjSize*Canvas_Scale, this.ObjSize*Canvas_Scale);
+   
+  this.ButtonSign.graphics.setStrokeStyle(this.SignStrike*Canvas_Scale).beginStroke("#000000").moveTo((this.ObjX+this.SignIndent)*Canvas_Scale, (this.ObjY+this.TextFont+this.ObjBorder+this.SignIndent)*Canvas_Scale)
+  .lineTo((this.ObjX+this.ObjSize/2)*Canvas_Scale, (this.ObjY+this.TextFont+this.ObjBorder+this.ObjSize-this.SignIndent)*Canvas_Scale).lineTo((this.ObjX+this.ObjSize-this.SignIndent)*Canvas_Scale,(this.ObjY+this.TextFont+this.ObjBorder+this.SignIndent)*Canvas_Scale);
+    
+  this.MainObjContainer.addChild(this.ObjText);
+  this.MainObjContainer.addChild(this.ButtonFone);
+  this.MainObjContainer.addChild(this.ButtonSign);
+ }  
+ 
+ ListenersOn()
+ {
+  this.MouseDownListener = this.MainObjContainer.on('mousedown', this.OnButMouseDown, this);
+ }
+ 
+ ListenersOff()
+ {
+  this.MainObjContainer.off('mousedown', this.MouseDownListener);
+ }
+ 
+ SetButtonOn()
+ {
+  this.ButtonOn = true;
+  this.ButtonSign.alpha = 1;
+ }
+ 
+ SetButtonOff()
+ {
+  this.ButtonOn = false;
+  this.ButtonSign.alpha = 0;
+ }
+ 
+ OnButMouseDown()
+ {
+    this.ParentPnt.SetCheck(this.ObjID);    
+ }
+}
+
+/*******************************класс элемента выпадающего списка*********************************************/
+class SelectListField {
+  constructor(x,y,w,h,text,font,id,parentpt) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjW = w;
+    this.ObjH = h;
+    this.ObjID = id;
+    this.ParentPnt = parentpt;
+    this.TextFont = font;
+    this.TitleText = text;
+    this.TextIndent = 5;
+    this.ObjBorder = 3;
+    this.MainObjContainer = new createjs.Container();
+    this.ObjFone = new createjs.Shape();
+    this.ObjSign = new createjs.Shape();
+    this.ObjText = new createjs.Text(text, ""+this.TextFont*Canvas_Scale+"px Arial", "#000000").set({textAlign: "left", textBaseline: "middle", x: (this.ObjX+2)*Canvas_Scale, y: (this.ObjY+this.ObjH/2)*Canvas_Scale});
+    
+    this.MouseOverListener;
+    this.MouseOutListener;
+    this.MouseDownListener;
+    
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  this.ObjFone.graphics.clear();
+  this.ObjSign.graphics.clear();
+  
+  this.ObjFone.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("#000000").beginFill(ColorYellow01).drawRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale);  
+  this.ObjSign.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("#000000").beginFill(ColorYellow02).drawRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale);  
+ 
+  this.ObjText.set({font: ""+this.TextFont*Canvas_Scale+"px Arial", x: (this.ObjX+2)*Canvas_Scale, y: (this.ObjY+this.ObjH/2)*Canvas_Scale});
+  
+  this.ObjSign.visible = false;
+  
+  this.MainObjContainer.addChild(this.ObjFone);
+  this.MainObjContainer.addChild(this.ObjSign);
+  this.MainObjContainer.addChild(this.ObjText);
+ } 
+
+ ListenersOn()
+ {
+  this.MouseOverListener = this.MainObjContainer.on('mouseover', this.OnButMouseOver, this);
+  this.MouseOutListener = this.MainObjContainer.on('mouseout', this.OnButMouseOut, this);
+  this.MouseDownListener = this.MainObjContainer.on('mousedown', this.OnButMouseDown, this);
+ }
+ 
+ ListenersOff()
+ {
+  this.MainObjContainer.off('mouseover', this.MouseOverListener);
+  this.MainObjContainer.off('mouseout', this.MouseOutListener);
+  this.MainObjContainer.off('mousedown', this.MouseDownListener);
+ }
+ 
+ OnButMouseOver()
+ {
+    this.ObjSign.visible = true;
+    stage.update();
+ }
+ 
+ OnButMouseOut()
+ {
+    this.ObjSign.visible = false;
+    stage.update();
+ }
+ 
+ OnButMouseDown()
+ {
+    this.ParentPnt.SetListText(this.ObjID);
+ }
+}
+
+/*******************************класс кнопки для выпадающего списка*********************************************/
+class SelectListButton {
+  constructor(x,y,w,h,id,parentpt) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjW = w;
+    this.ObjH = h;
+    this.ObjID = id;
+    this.ParentPnt = parentpt;
+    this.SignIndent = 5;
+    this.ObjBorder = 3;
+    this.MainObjContainer = new createjs.Container(); 
+    this.Fone = new createjs.Shape();
+    this.Sign = new createjs.Shape();
+   
+   this.MouseDownListener;    
+   this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  
+  this.Fone.graphics.clear();  
+  this.Sign.graphics.clear();
+  
+  this.Fone.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("Black").beginFill(ColorGreen01).drawRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale,this.ObjH*Canvas_Scale);  
+  this.Sign.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("Black").beginFill("#000000").moveTo( (this.ObjX+this.SignIndent)*Canvas_Scale, (this.ObjY+this.SignIndent)*Canvas_Scale)
+  .lineTo( (this.ObjX+this.ObjW-this.SignIndent)*Canvas_Scale, (this.ObjY+this.SignIndent)*Canvas_Scale)
+  .lineTo( (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH-this.SignIndent)*Canvas_Scale).closePath();  
+   
+  this.MainObjContainer.addChild(this.Fone);
+  this.MainObjContainer.addChild(this.Sign);
+ } 
+  
+ ListenersOn()
+ {
+  this.MouseDownListener = this.MainObjContainer.on('mousedown', this.OnButMouseDown, this);
+ }
+ 
+ ListenersOff()
+ {
+  this.MainObjContainer.off('mousedown', this.MouseDownListener);
+ }
+ 
+ OnButMouseDown()
+ {
+    this.ParentPnt.OnListOpen(this.ObjID);
+ }
+}
+
+/*******************************класс блоков с динамическим текстом*********************************************/
+class SelectList {
+  constructor(x,y,w,h,txtarr,id,parentpt) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjW = w;
+    this.ObjH = h;  
+    this.ObjID = id;
+    this.ParentPnt = parentpt;
+    this.TextArr = txtarr;
+    this.TextFont = this.ObjH-2;
+    this.SelectedID = 0;
+    this.TextIndent = 5;
+    this.ObjBorder = 3;
+    this.MainObjContainer = new createjs.Container();
+    this.SelectListContainer = new createjs.Container();
+    this.ObjFone = new createjs.Shape();
+        
+    this.ObjText = new createjs.Text(this.TextArr[this.SelectedID], ""+this.TextFont*Canvas_Scale+"px Arial", "#000000").set({textAlign: "left", textBaseline: "middle", x: (this.ObjX+2)*Canvas_Scale, y: (this.ObjY+this.ObjH/2)*Canvas_Scale });
+    
+    this.SelectListArr = new Array();
+    for(let i = 0; i < this.TextArr.length; i++)
+    {
+      this.SelectListArr[i] = new SelectListField(this.ObjX,this.ObjY+this.ObjH*(i+1),this.ObjW+this.ObjH,this.ObjH,this.TextArr[i],this.TextFont,i,this);
+      this.SelectListContainer.addChild(this.SelectListArr[i].MainObjContainer);
+    }
+    
+    this.SelectListContainer.visible = false;
+    this.ListOpenBtn = new SelectListButton(this.ObjX+this.ObjW,this.ObjY,this.ObjH,this.ObjH,0,this);
+    
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  
+  this.ObjFone.graphics.clear();
+    
+  this.ObjFone.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("#000000").beginFill(ColorGreen01).drawRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale);  
+  this.ObjText.set({font: ""+this.TextFont*Canvas_Scale+"px Arial", x: (this.ObjX+2)*Canvas_Scale, y: (this.ObjY+this.ObjH/2)*Canvas_Scale});
+  
+  this.ListOpenBtn.CreateContainer();
+  
+  for(let i = 0; i < this.SelectListArr.length; i++)
+  {
+    this.SelectListArr[i].CreateContainer();
+  }
+  
+  this.MainObjContainer.addChild(this.SelectListContainer);
+  this.MainObjContainer.addChild(this.ObjFone);
+  this.MainObjContainer.addChild(this.ObjText);
+  this.MainObjContainer.addChild(this.ListOpenBtn.MainObjContainer);
+ } 
+ 
+ ListenersOn()
+ {
+  this.ListOpenBtn.ListenersOn();
+ }
+ 
+ ListenersOff()
+ {
+  this.ListOpenBtn.ListenersOff();
+ }
+ 
+ OnListOpen(ObjID)
+ {
+  this.SelectListContainer.visible = true;
+  for(let i = 0; i < this.SelectListArr.length; i++)
+  {
+    this.SelectListArr[i].ListenersOn();
+  }
+  stage.update();
+ }
+ 
+ SetListText(ObjID)
+ {
+  if( (ObjID < 0)||(ObjID >= this.SelectListArr.length) )
+    return;
+    
+  this.SelectedID = ObjID;
+  this.ObjText.text = this.SelectListArr[this.SelectedID].TitleText;
+  this.SelectListContainer.visible = false;
+  for(let i = 0; i < this.SelectListArr.length; i++)
+  {
+    this.SelectListArr[i].ListenersOff();
+  }
+  this.ParentPnt.SetListPosition(this.ObjID, ObjID);
+  stage.update();
+ }
+ 
+}
+
+/*******************************класс поля с подсказками*********************************************/
+class HelpNotes{
+  constructor(parentpt) { 
+    this.ObjX = 340;
+    this.ObjY = 160;
+    this.ObjW = 600;
+    this.ObjH = 200;
+    this.ParentPnt = parentpt;
+    this.TextFont = 25;
+    this.ButCloseR = 25;
+    this.MainObjContainer = new createjs.Container(); 
+    //this.NotesTextArray = new Array();
+    this.Fone = new createjs.Shape();  
+    this.CloseButton = new createjs.Shape();
+    this.Text1 = new createjs.Text("Информация!!!", "bold "+this.TextFont*Canvas_Scale+"px Arial", "#ff0000").set({textAlign: "left", textBaseline: "top", regX: 0, regY: 0,}); 
+    this.Text2 = new createjs.Text("Подробности", "bold "+this.TextFont*Canvas_Scale+"px Arial", "#000000").set({textAlign: "left", textBaseline: "top", regX: 0, regY: 0,}); 
+    this.NotesTextArr = new Array();
+    this.NotesTextArr[0] = "В игре должно быть не меньше чем "+MinimalPlayersCount+" игрока";
+    this.NotesTextArr[1] = "Это поле уже занято, щелкайте по свободным полям!";
+    this.NotesTextArr[2] = "Искусственный интеллект с низким уровнем IQ ставит свои фигуры случайным образом на свободных полях.";
+    this.NotesTextArr[3] = "Искусственный интеллект со средним уровнем IQ старается выставлять свои фигуры в ряд. Если ему мешают, он строит другой ряд.";
+    this.NotesTextArr[4] = "Искусственный интеллект с высоким уровнем IQ старается расставить свои фигуры в ряд и помешать это сделать противнику.";
+        
+    this.MouseDownListener;
+    this.ExitDownListener;
+  }
+  
+  CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  this.Fone.graphics.clear();
+  this.CloseButton.graphics.clear();
+  
+  //this.Fone.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").beginFill("#ffffff").drawRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale);
+  this.Fone.graphics.setStrokeStyle(3*Canvas_Scale).beginStroke("#000000").beginRadialGradientFill([ColorYellow01, ColorYellow02],[0, 1], (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, 0, (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, this.ObjW/2*Canvas_Scale).drawRoundRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale, this.ButCloseR*Canvas_Scale);  
+ 
+  this.CloseButton.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").beginFill(ColorGreen01).drawCircle(0, 0, this.ButCloseR*Canvas_Scale);
+  this.CloseButton.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").moveTo(0, -1*this.ButCloseR*Canvas_Scale).lineTo(0, this.ButCloseR*Canvas_Scale);
+  this.CloseButton.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").moveTo(-1*this.ButCloseR*Canvas_Scale, 0).lineTo(this.ButCloseR*Canvas_Scale, 0);
+  this.CloseButton.set({regX:0, regY:0, rotation:45, x:(this.ObjX+this.ObjW-30)*Canvas_Scale, y: (this.ObjY+30)*Canvas_Scale});
+  
+  this.Text1.set({font: "bold "+this.TextFont*Canvas_Scale+"px Arial", color: "#ff0000", x:(this.ObjX+160)*Canvas_Scale, y:(this.ObjY+5)*Canvas_Scale});  
+  this.Text2.set({font: "bold "+this.TextFont*Canvas_Scale+"px Arial", color: "#000000", lineWidth: (this.ObjW-this.ButCloseR*2)*Canvas_Scale, x:(this.ObjX+15)*Canvas_Scale, y:(this.ObjY+35)*Canvas_Scale});  
+ 
+  this.MainObjContainer.addChild(this.Fone);
+  this.MainObjContainer.addChild(this.Text1);
+  this.MainObjContainer.addChild(this.Text2);
+  this.MainObjContainer.addChild(this.CloseButton);
+ }  
+ 
+ SetText(Ind)
+ {
+  if( (Ind >= this.NotesTextArr.length)||(Ind < 0) )
+    this.Text2.text = "";
+    
+  this.Text2.text = this.NotesTextArr[Ind];
+ }
+ 
+ ListenersOn()
+ {
+    this.MouseDownListener = this.Fone.on('mousedown', this.OnFoneMouseDown, this);
+    this.ExitDownListener = this.CloseButton.on('mousedown', this.OnButMouseDown, this);    
+ }
+ 
+ ListenersOff()
+ {
+  this.CloseButton.off('mousedown', this.ExitDownListener);
+  this.Fone.off('mousedown', this.MouseDownListener);
+ }
+ 
+ OnButMouseDown()
+ {
+   this.ParentPnt.CloseHelpNote();  
+ }
+ 
+ OnFoneMouseDown() {}
+}
+
+/*******************************класс поля с подсказками*********************************************/
+class Help{
+  constructor(parentpt) { 
+    this.ObjX = 0;
+    this.ObjY = 0;
+    this.ObjW = w;
+    this.ObjH = h;
+    this.TextFont = 25;
+    this.ParentPnt = parentpt;
+    this.ButCloseR = 25;
+    this.MainObjContainer = new createjs.Container(); 
+    this.Fone = new createjs.Shape();  
+    this.CloseButton = new createjs.Shape();
+    this.Text = new createjs.Text("Правила игры\nЗапустите видео, чтобы посмотреть описание.", "bold "+this.TextFont*Canvas_Scale+"px Arial", "#ff0000").set({textAlign: "center", textBaseline: "top", regX: 0, regY: 0,}); 
+    this.MouseDownListener;
+    this.ExitDownListener;
+  }
+  
+  CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  this.Fone.graphics.clear();
+  this.CloseButton.graphics.clear();
+  this.Text.set({font: "bold "+this.TextFont*Canvas_Scale+"px Arial", color: "#ff0000", x:(this.ObjX+this.ObjW/2)*Canvas_Scale, y:(this.ObjY+5)*Canvas_Scale});  
+ 
+  //this.Fone.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").beginFill("#ffffff").drawRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale);
+  this.Fone.graphics.setStrokeStyle(3*Canvas_Scale).beginStroke("#000000").beginRadialGradientFill([ColorYellow01, ColorYellow02],[0, 1], (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, 0, (this.ObjX+this.ObjW/2)*Canvas_Scale, (this.ObjY+this.ObjH/2)*Canvas_Scale, this.ObjW/2*Canvas_Scale).drawRoundRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjW*Canvas_Scale, this.ObjH*Canvas_Scale, this.ButCloseR*Canvas_Scale);  
+ 
+  HelpVideo.set({x: (window.innerWidth-10 - w*Canvas_Scale)/2+40*Canvas_Scale, y: (this.ButCloseR*2+25)*Canvas_Scale, scaleX: Canvas_Scale, scaleY: Canvas_Scale}); 
+  
+  this.CloseButton.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").beginFill(ColorGreen01).drawCircle(0, 0, this.ButCloseR*Canvas_Scale);
+  this.CloseButton.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").moveTo(0, -1*this.ButCloseR*Canvas_Scale).lineTo(0, this.ButCloseR*Canvas_Scale);
+  this.CloseButton.graphics.setStrokeStyle(2*Canvas_Scale).beginStroke("#000000").moveTo(-1*this.ButCloseR*Canvas_Scale, 0).lineTo(this.ButCloseR*Canvas_Scale, 0);
+  this.CloseButton.set({regX:0, regY:0, rotation:45, x:(this.ObjX+this.ObjW-30)*Canvas_Scale, y: (this.ObjY+30)*Canvas_Scale});
+   
+  this.MainObjContainer.addChild(this.Fone);
+  this.MainObjContainer.addChild(this.Text);
+  this.MainObjContainer.addChild(this.CloseButton);
+  this.MainObjContainer.addChild(HelpVideo);
+ }  
+ 
+ ListenersOn()
+ {
+    this.MouseDownListener = this.Fone.on('mousedown', this.OnFoneMouseDown, this);
+    this.ExitDownListener = this.CloseButton.on('mousedown', this.OnButMouseDown, this);    
+    HelpVideo.visible = true;
+ }
+ 
+ ListenersOff()
+ {
+  this.CloseButton.off('mousedown', this.ExitDownListener);
+  this.Fone.off('mousedown', this.MouseDownListener);
+  HelpVideo.visible = false;
+ }
+ 
+ OnButMouseDown()
+ {
+   this.ParentPnt.CloseHelp();  
+ }
+ 
+ OnFoneMouseDown() {}
+}
+
+/*******************************класс квадрата*********************************************/
+class Quadric {
+  constructor(x,y,s,r,c,parentpt) { 
+    this.ObjX = x;
+    this.ObjY = y;
+    this.ObjSize = s;
+    this.ObjType = -1;
+    this.ObjRow = r;
+    this.ObjCol = c;
+    this.ParentPnt = parentpt;
+    this.ObjBorder = 3;
+    this.SignStroke = 10;
+    this.SignIndent = 15;
+    this.MainObjContainer = new createjs.Container(); 
+    this.Fone = new createjs.Shape();
+    this.SignsArr = new Array();
+    this.SignsArr[0] = new createjs.Shape();
+    this.SignsArr[1] = new createjs.Shape();
+    this.SignsArr[2] = new createjs.Shape();
+    this.SignsArr[3] = new createjs.Shape();
+    
+    for(let i = 0; i < this.SignsArr.length; i++)
+    {
+      //this.CreateSign(i, this.SignsArr[i]);
+      this.SignsArr[i].visible = false;
+    }
+    
+    this.MouseDownListener;
+    
+    this.CreateContainer();
+  }
+  
+ CreateContainer(){   
+  if(this.MainObjContainer == null)
+  {
+     alert("MainObjContainer не был создан!");
+     return;
+  }
+    
+  if(this.Fone == null)
+  {
+    alert("Fone не был создан!");
+    return;
+  }
+    
+  this.MainObjContainer.removeAllChildren();
+  
+  this.Fone.graphics.clear();
+  this.Fone.graphics.setStrokeStyle(this.ObjBorder*Canvas_Scale).beginStroke("#000000").beginFill("#ffffff").drawRect(this.ObjX*Canvas_Scale, this.ObjY*Canvas_Scale, this.ObjSize*Canvas_Scale, this.ObjSize*Canvas_Scale);
+  
+  for(let i = 0; i < this.SignsArr.length; i++)
+  {
+     this.CreateSign(i, this.SignsArr[i]);
+  }
+    
+  this.MainObjContainer.addChild(this.Fone);
+  for(let i = 0; i < this.SignsArr.length; i++)
+  {
+    this.MainObjContainer.addChild(this.SignsArr[i]);
+  }
+ }  
+ 
+ CreateSign(type,obj)
+ {
+    obj.graphics.clear();
+    if(type == 0)
+    {
+      obj.graphics.setStrokeStyle(this.SignStroke*Canvas_Scale).beginStroke("#ff0000").moveTo(this.SignIndent*Canvas_Scale,this.SignIndent*Canvas_Scale)
+      .lineTo( (this.ObjSize-this.SignIndent)*Canvas_Scale, (this.ObjSize-this.SignIndent)*Canvas_Scale).moveTo((this.ObjSize-this.SignIndent)*Canvas_Scale, this.SignIndent*Canvas_Scale)
+      .lineTo( this.SignIndent*Canvas_Scale, (this.ObjSize-this.SignIndent)*Canvas_Scale);
+      obj.set({x: this.ObjX*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+    }
+    else if(type == 1)
+    {
+      obj.graphics.setStrokeStyle(this.SignStroke*Canvas_Scale).beginStroke("#0000ff").beginFill("rgba(255,255,255,0)").drawCircle(this.ObjSize/2*Canvas_Scale, this.ObjSize/2*Canvas_Scale, (this.ObjSize/2-this.SignIndent)*Canvas_Scale);
+      obj.set({x: this.ObjX*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+    }
+    else if(type == 2)
+    {
+      obj.graphics.setStrokeStyle(this.SignStroke*Canvas_Scale).beginStroke("#00ff00").moveTo(this.SignIndent*Canvas_Scale, (this.ObjSize-this.SignIndent)*Canvas_Scale)
+      .lineTo( this.ObjSize/2*Canvas_Scale, this.SignIndent*Canvas_Scale).lineTo((this.ObjSize-this.SignIndent)*Canvas_Scale, (this.ObjSize-this.SignIndent)*Canvas_Scale)
+      .closePath();
+      obj.set({x: this.ObjX*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+    }
+    else
+    {
+      obj.graphics.setStrokeStyle(this.SignStroke*Canvas_Scale).beginStroke("#00ffff").beginFill("rgba(255,255,255,0)").drawRect(this.SignIndent*Canvas_Scale,
+      this.SignIndent*Canvas_Scale, (this.ObjSize-this.SignIndent*2)*Canvas_Scale, (this.ObjSize-this.SignIndent*2)*Canvas_Scale);
+      obj.set({x: this.ObjX*Canvas_Scale, y: this.ObjY*Canvas_Scale});
+    } 	    
+ }
+ 
+ ClearFigure()
+ {
+  this.ObjType = -1;
+  for(let i = 0; i < this.SignsArr.length; i++)
+  {
+     this.SignsArr[i].visible = false;
+  }
+ }
+ 
+ SetFigure(id)
+ {
+  this.ObjType = id;
+  for(let i = 0; i < this.SignsArr.length; i++)
+  {
+    if(id == i)
+     this.SignsArr[i].visible = true;
+    else
+     this.SignsArr[i].visible = false
+  }
+ }
+ 
+ ListenersOn()
+ {
+  this.MouseDownListener = this.Fone.on('mousedown', this.OnButMouseDown, this);
+ }
+ 
+ ListenersOff()
+ {
+  this.Fone.off('mousedown', this.MouseDownListener);
+ }
+ 
+ OnButMouseDown()
+ {
+    this.ParentPnt.SetFigure(this.ObjRow, this.ObjCol);     
+ }
+}
+
+/*******************************************функция инициализации всех объектов*********************************************/
+function init()
+{
+  canvas = document.getElementById("DrawingCanvas");//находим элемент canvas и присваиваем указателю ссылку на него  
+  stage = new createjs.Stage(canvas); //создаем новую сцену
+  
+  HelpVideo = new createjs.DOMElement("hlpvid");
+  HelpVideo.visible = false;
+  
+  CashContainer = new createjs.Container(); //контейнер кэш
+  CashContainer.cache(0,0,w*Canvas_Scale, h*Canvas_Scale);
+  ElementsContainer = new createjs.Container();
+  QuadricsContainer = new createjs.Container();
+  
+  Fone = new createjs.Shape();
+  WinLine = {obj: new createjs.Shape(), lb: 0, tb: 0, rb: 0, bb: 0};
+  WinLine.obj.visible = false;
+  BtnAgain = new ButtonCommon(5,9,310,70,1,"Начать игру",AllTextFont,this);
+  BtnClear = new ButtonCommon(966,9,310,70,2,"Сброс",AllTextFont,this);
+  WhoseMoveTxt = new TextBox(317,9,647,46, NoteText, AllTextFont, "#ff0000"); 
+  HelpNotesObj = new HelpNotes(this); //объект для диалога-подсказки
+  HelpObj = new Help(this);
+  HelpNotesObj.MainObjContainer.visible = false;
+  HelpObj.MainObjContainer.visible = false;
+  
+  QuadSequenceArr[0] = {obj: new  RadioButton(55,150,70,"3/3",AllTextFont,0,this), qsidecount: 3, qwincount: 3};
+  QuadSequenceArr[1] = {obj: new  RadioButton(195,150,70,"4/4",AllTextFont,1,this), qsidecount: 4, qwincount: 3};  
+  QuadSequenceArr[2] = {obj: new  RadioButton(55,270,70,"5/5",AllTextFont,2,this), qsidecount: 5, qwincount: 4};  
+  QuadSequenceArr[3] = {obj: new  RadioButton(195,270,70,"6/6",AllTextFont,3,this), qsidecount: 6, qwincount: 4}; 
+  
+  CompIQLevelsArr[0] = {text: "ии низк IQ", func: ComputerStepLowIQ, infoobj: new ButtonCommon(18,418,283,35,3,"Описание \"ии низк IQ\"",21,this), butid: 3, helpid: 2};
+  CompIQLevelsArr[1] = {text: "ии средн IQ", func: ComputerStepMiddleIQ, infoobj: new ButtonCommon(18,463,283,35,4,"Описание \"ии средн IQ\"",21,this), butid: 4, helpid: 3};
+  CompIQLevelsArr[2] = {text: "ии высок IQ", func: ComputerStepHighIQ, infoobj: new ButtonCommon(18,508,283,35,5,"Описание \"ии высок IQ\"",21,this), butid: 5, helpid: 4}; 
+  
+  GameHelp = new ButtonCommon(18,553,283,35,100,"Правила игры",21,this); 
+  
+  QuadSequenceArr[CurrentQSequenceID].obj.SetRadioOn();
+ 
+  TaskText = new createjs.Text("Нужно выставить в линию " + QuadSequenceArr[CurrentQSequenceID].qwincount +" фигуры", ""+25*Canvas_Scale+"px Arial", "#000000").set({textAlign: "left", textBaseline: "top", lineWidth: 300*Canvas_Scale, x: 15*Canvas_Scale, y: 85*Canvas_Scale});
+  SetIQText = new createjs.Text("Подсказки:", ""+25*Canvas_Scale+"px Arial", "#000000").set({textAlign: "left", textBaseline: "top", lineWidth: 300*Canvas_Scale, x: 85*Canvas_Scale, y: 390*Canvas_Scale});
+  
+  PlayersArray[0] = {title: "Крестик", resdisp: new ResultDisplay(5,601,310,46,"Победы X",AllTextFont,"#ff0000"), chekb: new CheckButton(1000,105,70,"Крестик",AllTextFont,0,this),
+  sellist: new SelectList(1100,160,145,26,["игрок", CompIQLevelsArr[0].text, CompIQLevelsArr[1].text, CompIQLevelsArr[2].text],0,this), winscount: 0, active: true, comp: false, compIQ: 0};
+  PlayersArray[1] = {title: "Нолик", resdisp: new ResultDisplay(5,661,310,46,"Победы O",AllTextFont,"#ff0000"), chekb: new CheckButton(1000,225,70,"Нолик",AllTextFont,1,this),
+  sellist: new SelectList(1100,280,145,26,["игрок", CompIQLevelsArr[0].text, CompIQLevelsArr[1].text, CompIQLevelsArr[2].text],1,this), winscount: 0, active: true, comp: false, compIQ: 0};
+  PlayersArray[2] = {title: "Треугольник", resdisp: new ResultDisplay(966,601,310,46,"Победы T",AllTextFont,"#ff0000"), chekb: new CheckButton(1000,345,70,"         Треугольник",AllTextFont,2,this),
+  sellist: new SelectList(1100,400,145,26,["игрок", CompIQLevelsArr[0].text, CompIQLevelsArr[1].text, CompIQLevelsArr[2].text],2,this), winscount: 0, active: false, comp: false, compIQ: 0};
+  PlayersArray[3] = {title: "Квадрат", resdisp: new ResultDisplay(966,661,310,46,"Победы K",AllTextFont,"#ff0000"), chekb: new CheckButton(1005,465,70,"Квадрат",AllTextFont,3,this),
+  sellist: new SelectList(1100,520,145,26,["игрок", CompIQLevelsArr[0].text, CompIQLevelsArr[1].text, CompIQLevelsArr[2].text],3,this), winscount: 0, active: false, comp: false, compIQ: 0};
+ 
+  for(let i = 0; i < PlayersArray.length; i++)
+  {
+    if(PlayersArray[i].active)
+      PlayersArray[i].chekb.SetButtonOn();
+    else
+      PlayersArray[i].chekb.SetButtonOff();
+  }
+  
+  CreateQuadricsSet();
+  
+  OnResize();
+  
+  ListenersOn();  
+  
+  //создаем обработчик событий мыши
+  createjs.Touch.enable(stage);
+  stage.enableMouseOver(300);
+  window.addEventListener("resize", OnResize, false);  
+}
+
+function ListenersOn()
+{
+  BtnClear.ListenersOn();
+  BtnAgain.ListenersOn();
+  
+  for(let i = 0; i < QuadSequenceArr.length; i++)
+  {
+    QuadSequenceArr[i].obj.ListenersOn();
+  }
+  
+  for(let i = 0; i < PlayersArray.length; i++)
+  {
+    PlayersArray[i].chekb.ListenersOn();
+    PlayersArray[i].sellist.ListenersOn();
+  }
+  
+  for(let i = 0; i < CompIQLevelsArr.length; i++)
+  {
+    CompIQLevelsArr[i].infoobj.ListenersOn();
+  }
+  
+  GameHelp.ListenersOn();
+  
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+      QuadricsArr[r][c].ListenersOff();
+      QuadricsArr[r][c].ListenersOn();
+    }
+  }
+}
+
+function ListenersOff()
+{
+  BtnClear.ListenersOff();
+  BtnAgain.ListenersOff();
+  
+  for(let i = 0; i < QuadSequenceArr.length; i++)
+  {
+    QuadSequenceArr[i].obj.ListenersOff();
+  }
+  
+  for(let i = 0; i < PlayersArray.length; i++)
+  {
+    PlayersArray[i].chekb.ListenersOff();
+    PlayersArray[i].sellist.ListenersOff();
+  }
+  
+  for(let i = 0; i < CompIQLevelsArr.length; i++)
+  {
+    CompIQLevelsArr[i].infoobj.ListenersOff();
+  }
+  
+  GameHelp.ListenersOff();
+  
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+      QuadricsArr[r][c].ListenersOff();
+    }
+  }
+}
+
+function CreateMainObjects(){
+  CashContainer.uncache();
+  CashContainer.removeAllChildren();
+  ElementsContainer.removeAllChildren();
+  QuadricsContainer.removeAllChildren();
+  
+  stage.removeAllChildren();
+  
+  CreateFone();
+  BtnClear.CreateContainer();
+  BtnAgain.CreateContainer();
+  HelpNotesObj.CreateContainer();
+  HelpObj.CreateContainer();
+  WhoseMoveTxt.CreateContainer();
+  
+  TaskText.set({ font: ""+25*Canvas_Scale+"px Arial", lineWidth: 300*Canvas_Scale, x: 15*Canvas_Scale, y: 85*Canvas_Scale});
+  SetIQText.set({ font: ""+25*Canvas_Scale+"px Arial", lineWidth: 300*Canvas_Scale, x: 85*Canvas_Scale, y: 390*Canvas_Scale});
+ 
+  for(let i = 0; i < PlayersArray.length; i++)
+  {
+    PlayersArray[i].resdisp.CreateContainer();
+    PlayersArray[i].chekb.CreateContainer();
+    PlayersArray[i].sellist.CreateContainer();
+    ElementsContainer.addChild(PlayersArray[i].resdisp.MainObjContainer);
+    ElementsContainer.addChild(PlayersArray[i].chekb.MainObjContainer);
+  }
+  
+  for(let i = PlayersArray.length-1; i >= 0 ; i--)
+  {
+    ElementsContainer.addChild(PlayersArray[i].sellist.MainObjContainer);
+  }
+  
+  for(let i = 0; i < QuadSequenceArr.length; i++)
+  {
+    QuadSequenceArr[i].obj.CreateContainer();
+    ElementsContainer.addChild(QuadSequenceArr[i].obj.MainObjContainer);
+  }
+    
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+     QuadricsArr[r][c].CreateContainer();
+     QuadricsContainer.addChild(QuadricsArr[r][c].MainObjContainer);
+    }    
+  }
+  
+  for(let i = 0; i < CompIQLevelsArr.length; i++)
+  {
+    CompIQLevelsArr[i].infoobj.CreateContainer();
+    ElementsContainer.addChild(CompIQLevelsArr[i].infoobj.MainObjContainer);
+  }
+    
+  GameHelp.CreateContainer();
+  ElementsContainer.addChild(GameHelp.MainObjContainer);
+  
+  DrawWinLine(WinLine.lb, WinLine.tb, WinLine.rb, WinLine.bb);
+  
+  CashContainer.addChild(Fone);
+  CashContainer.addChild(BtnClear.MainObjContainer);
+  CashContainer.addChild(BtnAgain.MainObjContainer);
+  ElementsContainer.addChild(WhoseMoveTxt.MainObjContainer);
+  ElementsContainer.addChild(TaskText);
+  ElementsContainer.addChild(SetIQText);
+  QuadricsContainer.addChild(WinLine.obj);
+  ElementsContainer.addChild(HelpNotesObj.MainObjContainer);
+  ElementsContainer.addChild(HelpObj.MainObjContainer);  
+  stage.addChild(CashContainer);
+  stage.addChild(QuadricsContainer);
+  stage.addChild(ElementsContainer);  
+  CashContainer.cache(0,0,w*Canvas_Scale, h*Canvas_Scale);
+  stage.update();
+}
+
+function CreateQuadricsSet()
+{
+  QuadricsContainer.removeAllChildren();
+  
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+      QuadricsArr[r][c].ListenersOff();
+      QuadricsArr[r][c] = null;
+    }    
+  }
+  
+  QuadricsArr.length = 0;
+  
+  let qseguence = QuadSequenceArr[CurrentQSequenceID].qsidecount;
+  let qsize = QuadFieldSize/qseguence;
+
+  for(let r = 0; r < qseguence; r++)
+  {
+    QuadricsArr[r] = new Array();
+    for(let c = 0; c < qseguence; c++)
+    {
+      QuadricsArr[r][c] = new Quadric(QuadFieldX+qsize*c,QuadFieldY+qsize*r,qsize,r,c,this);
+      QuadricsArr[r][c].ListenersOn();
+      QuadricsContainer.addChild(QuadricsArr[r][c].MainObjContainer);
+    }
+  }
+  
+  WinLine.obj.visible = false;
+  QuadricsContainer.addChild(WinLine.obj);
+  
+  CreatePossibleLineComb();
+}
+
+function CreatePossibleLineComb()
+{
+  PossibleLineComb.length = 0;
+  
+  let qsidecount = QuadSequenceArr[CurrentQSequenceID].qsidecount;
+  let qwincount = QuadSequenceArr[CurrentQSequenceID].qwincount;
+  
+  //записываем все возможные выигрышные комбинации по горизонтальным рядам
+  let ind = 0;
+  for(let r = 0; r < qsidecount; r++)
+  {
+    for(let c = 0; c <= qsidecount-qwincount; c++)
+    {
+      let linearr = new Array();
+      for(let i = 0; i < qwincount; i++)
+      {
+	linearr[i] = {row: r, col: c+i};	
+      }
+      PossibleLineComb[ind] = linearr;
+      ind++;
+    }
+  }
+  
+  //записываем все возможные выигрышные комбинации по вертикальным рядам
+  for(let c = 0; c < qsidecount; c++)
+  {
+    for(let r = 0; r <= qsidecount-qwincount; r++)
+    {
+      let linearr = new Array();
+      for(let i = 0; i < qwincount; i++)
+      {
+	linearr[i] = {row: r+i, col: c};	
+      }
+      PossibleLineComb[ind] = linearr;
+      ind++;
+    }
+  }
+  
+  //записываем все возможные выигрышные комбинации по диагоналям
+  
+  // центральная диагональ лев-верхн угол - правый-нижн
+  for(let r = 0; r <= qsidecount-qwincount; r++)
+  {
+    let linearr = new Array();
+    for(let i = 0; i < qwincount; i++)
+    {
+      linearr[i] = {row: r+i, col: r+i};	
+    }
+    PossibleLineComb[ind] = linearr;
+    ind++;
+  }
+  
+  // центральная диагональ лев-нижн угол - правый верхний
+  for(let r = qsidecount-1, c = 0; r >= qwincount-1; r--, c++)
+  {
+    let linearr = new Array();
+    for(let i = 0; i < qwincount; i++)
+    {
+      linearr[i] = {row: r-i, col: c+i};	
+    }
+    PossibleLineComb[ind] = linearr;
+    ind++;
+  }  
+  
+  // другие диагонали, примыкающие к центральной, если они есть лев-нижн угол - правый верхний над центральной диагональю
+  /* первый цикл просчитывает количество рядов и индексы их начальных полей, которые содержат общее количество полей равное
+    количеству выигрышных и более
+    Значит ряд должен начинаться индексом = количеству выйгрышных полей - 1 потому, что нумерация с 0
+    Заканчиваться предпоследним рядом - 1, так как центральная диагональ уже просчитана*/
+  for(let r = qwincount-1; r < qsidecount-1; r++)
+  {
+    /* начинается отсчет от столбца самого первого с индексом 0, но если в диагонали количество полей больше выигрышного, то в этой диагонали 
+    будет не одна комбинация выигрышных полей а столько, на сколько отличается количество полей от выигрышных
+    если ряд от которого начинается диагональ равен количеству полей в диагонали, но индекс ряда меньше на 1, так как нумерация с 0
+    Значит r+1 - это столько полей в диагонали. Отняв от этого количества количество выигрышных полей r+1-qwincount мы получаем количество
+    итераций или комбинаций из выигрышных полей, которые могут быть на этой диагонали*/
+    for(let c = 0; c <= r+1-qwincount; c++) 
+    {
+      let linearr = new Array();
+      /*заполняем массив полями, количество которых должно равняться выигрышному. Начальный ряд уменьшается на 1. Первое i = 0, поэтому ряд будет
+      равен r, дальше i увеличивается с каждой итерацией на 1 и индекс ряда уменьшается на такое же значение.
+      но если речь идет о длинной диагонали, то первая комбинация будет равна r, а вторая должна быть сдвинута вверх на 1 то есть начаться
+      с меньшего индекса поэтому пишем еще и r-i-c, так как с начальное = 0, а последующие будут зависеть от длины диагонали
+      столбец все время увеличиваем на 1 с каждой итерацией и пишем c+i, но опять же, если диагональ длинная, то сначала с будет равно 0,
+      а затем увеличиваться для записи новой комбинации выигрышных полей*/
+      for(let i = 0; i < qwincount; i++)
+      {
+	linearr[i] = {row: r-i-c, col: c+i};	
+      }
+      PossibleLineComb[ind] = linearr;
+      ind++;
+    }
+  } 
+   // другие диагонали, примыкающие к центральной, если они есть прав-нижн угол - левый верхний над центральной диагональю   
+   /* первый цикл просчитывает количество рядов и индексы их начальных полей, которые содержат общее количество полей равное
+    количеству выигрышных и более
+    Значит ряд должен начинаться индексом = количеству выйгрышных полей - 1 потому, что нумерация с 0
+    Заканчиваться предпоследним рядом - 1, так как центральная диагональ уже просчитана*/
+  for(let r = qwincount-1; r < qsidecount-1; r++)
+  {
+    /* начинается отсчет от столбца самого последнего с индексом qsidecount-1, но если в диагонали количество полей больше выигрышного, то в этой 
+    диагонали будет не одна комбинация выигрышных полей а столько, на сколько отличается количество полей от выигрышных
+    если ряд от которого начинается диагональ равен количеству полей в диагонали, но индекс ряда меньше на 1, так как нумерация с 0
+    Значит r+1 - это столько полей в диагонали. Разница между выигрышными полями и общим количеством полей это и есть количество
+    итераций или комбинаций из выигрышных полей, которые могут быть на этой диагонали*/
+    let с2 = 0;
+    for(let c = qsidecount-1; c >= qsidecount-1-(r+1-qwincount); c--) 
+    {
+      let linearr = new Array();
+      /*заполняем массив полями, количество которых должно равняться выигрышному. Начальный ряд уменьшается на 1. Первое i = 0, поэтому ряд будет
+      равен r, дальше i увеличивается с каждой итерацией на 1 и индекс ряда уменьшается на такое же значение.
+      но если речь идет о длинной диагонали, то первая комбинация будет равна r, а вторая должна быть сдвинута вверх на 1 то есть начаться
+      с меньшего индекса поэтому пишем еще и r-i-c, так как с начальное = 0, а последующие будут зависеть от длины диагонали
+      столбец все время увеличиваем на 1 с каждой итерацией и пишем c+i, но опять же, если диагональ длинная, то сначала с будет равно 0,
+      а затем увеличиваться для записи новой комбинации выигрышных полей*/
+      for(let i = 0; i < qwincount; i++)
+      {
+	linearr[i] = {row: r-i-с2, col: c-i};	
+      }
+      PossibleLineComb[ind] = linearr;
+      ind++; с2++;
+    }
+  }  
+    
+  // другие диагонали, примыкающие к центральной, если они есть лев-верхн угол - правый нижний под центральной диагональю
+  for(let r = qsidecount-qwincount; r >= 1; r--)
+  {
+    for(let c = 0; c <= qsidecount-r-qwincount; c++) 
+    {
+      let linearr = new Array();
+    
+      for(let i = 0; i < qwincount; i++)
+      {
+	linearr[i] = {row: r+i+c, col: c+i};	
+      }
+      PossibleLineComb[ind] = linearr;
+      ind++;
+    }
+  } 
+  
+  // другие диагонали, примыкающие к центральной, если они есть правый верхний угол -  лев-нижний под центральной диагональю
+  for(let r = qsidecount-qwincount; r >= 1; r--)
+  {
+    let с2 = 0;
+    for(let c = qsidecount-1; c >= qwincount+r-1; c--)
+    {
+      let linearr = new Array();
+    
+      for(let i = 0; i < qwincount; i++)
+      {
+	linearr[i] = {row: r+i+с2, col: c-i};	
+      }
+      PossibleLineComb[ind] = linearr;
+      ind++; с2++;
+    }
+  }    
+}
+
+function CheckPossibleLineComb()
+{
+  let newarr = new Array();
+  
+  let ind = 0;
+  for(let i = 0; i < PossibleLineCombCopy.length; i++)
+  {
+    let emptyfcount = 0;
+    for(let j = 0; j < PossibleLineCombCopy[i].length; j++)
+    {
+      if(QuadricsArr[ PossibleLineCombCopy[i][j].row ] [ PossibleLineCombCopy[i][j].col ].ObjType == -1)
+	emptyfcount++;
+    }
+    if(emptyfcount == QuadSequenceArr[CurrentQSequenceID].qwincount)
+    {
+      newarr[ind] = new Array()
+      newarr[ind] = PossibleLineCombCopy[i].slice(0,PossibleLineCombCopy[i].length); ind++;
+    }
+  }
+  
+  PossibleLineCombCopy.length = 0;    
+  PossibleLineCombCopy = newarr;
+}
+
+function CreateFone()
+{
+    if(Fone == null)
+    {
+      alert("Fone не был создан!");
+      return;
+    }
+	
+    Fone.graphics.clear();
+    Fone.graphics.setStrokeStyle(1).beginStroke("#000000").beginFill("#FF8000").drawRect(0, 0, w*Canvas_Scale, h*Canvas_Scale);  
+}
+
+function GetCountOfPlayers()
+{
+  let count = 0;
+  for(let i = 0; i < PlayersArray.length; i++)
+  {
+    if(PlayersArray[i].active)
+      count++;
+  }
+  return count;
+}
+
+function OpenHelpNote(Ind)
+{
+  if(StartGame == true)
+  {
+    PauseGame = true;  
+    StartGame = false;
+  }
+  
+  HelpNotesObj.SetText(Ind);
+  HelpNotesObj.ListenersOn();
+  HelpNotesObj.MainObjContainer.visible = true;
+  ListenersOff();
+  stage.update();
+}
+  
+function CloseHelpNote()
+{
+  if(PauseGame == true)
+  {
+    PauseGame = false;
+    StartGame = true;
+    if(PlayersArray[CurrentPlayerID].comp == true)
+      ComputerStep();
+  }
+  HelpNotesObj.ListenersOff();
+  HelpNotesObj.MainObjContainer.visible = false;
+  ListenersOn();
+  stage.update();
+}
+
+function CloseHelp()
+{
+  if(PauseGame == true)
+  {
+    PauseGame = false;
+    StartGame = true;
+    if(PlayersArray[CurrentPlayerID].comp == true)
+      ComputerStep();
+  }
+  HelpObj.ListenersOff();
+  HelpObj.MainObjContainer.visible = false;
+  ListenersOn();
+  stage.update();
+}
+
+function StartNewGame()
+{
+  ResetGame(); 
+  StartGame = true;
+  SetPlayerStep();
+}
+
+function ResetGame()
+{
+  clearTimeout(CompStepTimeoutID);
+  StartGame = false;
+  CompStepActive = false;
+  WhoseMoveTxt.OnSetText(NoteText);
+  
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+     QuadricsArr[r][c].ClearFigure();
+    }    
+  }
+    
+  PossibleLineCombCopy = PossibleLineComb.slice(0,PossibleLineComb.length);
+  for(let i = 0; i < MidIQIntermedData.length; i++)
+  {
+     MidIQIntermedData[i].length = 0;
+  }
+  WinLine.obj.visible = false;
+  CurrentPlayerID = 0;
+}
+
+function ResetAllData()
+{
+  /*Перед ходом искусственного интеллекта создается временная задержка, после которой запускается процедура хода.
+  Если перезагрузить игру и не отменить задержку, по процедура совершающая ход запустится все-равно после перезагрузки. 
+  Поэтому строка ниже отменяет задержку*/
+  
+  clearTimeout(CompStepTimeoutID); 
+  StartGame = false;
+  
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+      QuadricsArr[r][c].ClearFigure();
+    }    
+  }
+    
+  for(let i = 0; i < PlayersArray.length; i++)
+  {
+    PlayersArray[i].winscount = 0;
+    PlayersArray[i].resdisp.DisplayAnswersNum(PlayersArray[i].winscount);
+    
+    PlayersArray[i].sellist.SetListText(0);
+    
+    if(i<2)
+    {
+      PlayersArray[i].active = true;
+      PlayersArray[i].chekb.SetButtonOn();
+    }
+    else
+    {
+      PlayersArray[i].active = false;
+      PlayersArray[i].chekb.SetButtonOff();
+    }    
+  }
+      
+  WhoseMoveTxt.OnSetText(NoteText);
+  WinLine.obj.visible = false;
+  CreateQuadricsSet(0);
+  SwitchRadio(0);
+  
+  CurrentPlayerID = 0;
+  stage.update();
+}
+
+function SetFigure(ObjRow, ObjCol)
+{
+  if( (StartGame == false)||(CompStepActive == true) )
+    return;
+    
+  if(QuadricsArr[ObjRow][ObjCol].ObjType != -1)
+  {
+    OpenHelpNote(1);
+  }
+  else
+  {
+    QuadricsArr[ObjRow][ObjCol].SetFigure(CurrentPlayerID);
+    if(!CheckWin(ObjRow, ObjCol))
+    {
+      CurrentPlayerID++;
+      SetPlayerStep();
+    }
+    else
+      StartGame = false;
+  }
+}
+
+function SetPlayerStep()
+{
+  if( (StartGame == false)||(CompStepActive == true) )
+    return;
+    
+   if( (CurrentPlayerID >= PlayersArray.length)||(CurrentPlayerID < 0) )
+   {
+      CurrentPlayerID = 0;
+   }
+      
+  for(let i = CurrentPlayerID; i < PlayersArray.length; i++)
+  {
+    if(PlayersArray[i].active)
+    {
+      CurrentPlayerID = i;
+      WhoseMoveTxt.OnSetText("Ход "+PlayersArray[CurrentPlayerID].title+"а");
+      if(PlayersArray[CurrentPlayerID].comp == true)
+      {
+	stage.update();
+	CompStepActive = true;
+	CompStepTimeoutID = setTimeout(ComputerStep, 300);
+
+	return;
+      }
+      
+      stage.update();
+      return;
+    }
+  }
+  
+  for(let i = 0; i < CurrentPlayerID; i++)
+  {
+    if(PlayersArray[i].active)
+    {
+      CurrentPlayerID = i;
+      WhoseMoveTxt.OnSetText("Ход "+PlayersArray[CurrentPlayerID].title+"а");
+      if(PlayersArray[CurrentPlayerID].comp == true)
+      {
+	stage.update();
+	CompStepActive = true;
+	CompStepTimeoutID = setTimeout(ComputerStep, 300);
+	return;
+      }
+      
+      stage.update();
+      return;
+    }
+  }  
+}
+
+/*******************************************функция ресайза программы*********************************************/
+function OnResize(){
+  let canvas_width  = window.innerWidth-10;
+  let canvas_height = window.innerHeight-20; 
+  
+  if(canvas_width*h/w <= canvas_height)
+  {
+    Canvas_Scale = canvas_width/w;
+  }
+  else if(canvas_height*w/h <= canvas_width)
+  {
+    Canvas_Scale = canvas_height/h;
+  }
+  else
+  {
+    Canvas_Scale = 1;
+  }
+  
+  canvas.width  = w*Canvas_Scale;
+  canvas.height = h*Canvas_Scale;  
+   
+  CreateMainObjects();
+  
+  stage.update();  
+}
+
+function OnButtonCommonDown(butID)
+{
+  if(butID == 1)
+  {
+    StartNewGame();
+  }
+  else if(butID == CompIQLevelsArr[0].butid)
+  {
+    OpenHelpNote(CompIQLevelsArr[0].helpid);
+  }
+  else if(butID == CompIQLevelsArr[1].butid)
+  {
+    OpenHelpNote(CompIQLevelsArr[1].helpid);
+  }
+  else if(butID == CompIQLevelsArr[2].butid)
+  {
+    OpenHelpNote(CompIQLevelsArr[2].helpid);
+  }
+  else if(butID == 100)
+  {
+    if(StartGame == true)
+    {
+      PauseGame = true;  
+      StartGame = false;
+    }
+    
+    HelpObj.ListenersOn();
+    HelpObj.MainObjContainer.visible = true;
+    ListenersOff();
+    stage.update();
+  }
+  else
+  {
+    ResetAllData();    
+  }
+  
+  stage.update();
+}
+
+function SwitchRadio(ObjID)
+{
+  if( (ObjID<0)||(ObjID >= QuadSequenceArr.length))
+    return;
+  
+  if(StartGame == true)
+    ResetGame();
+  
+  
+  for(let i = 0; i < QuadSequenceArr.length; i++)
+  {
+    if(i == ObjID)
+    {
+      QuadSequenceArr[i].obj.SetRadioOn();
+      CurrentQSequenceID = i;
+      CreateQuadricsSet();
+      TaskText.text = "Нужно выставить в линию " + QuadSequenceArr[CurrentQSequenceID].qwincount +" фигуры";
+     }
+     else
+      QuadSequenceArr[i].obj.SetRadioOff();
+  } 
+  
+  stage.update();
+}
+
+function SetCheck(ObjID)
+{
+  if( (ObjID<0)||(ObjID>=PlayersArray.length))
+    return;
+  
+  if(StartGame == true)
+    ResetGame();
+  
+  if(PlayersArray[ObjID].active)
+  {
+      let plcount = GetCountOfPlayers();
+      if(plcount <= MinimalPlayersCount)
+      {
+	OpenHelpNote(0);
+      }
+      else if(plcount > MinimalPlayersCount)
+      {
+	PlayersArray[ObjID].active = false;
+	PlayersArray[ObjID].chekb.SetButtonOff();
+      }
+  }
+  else
+  {
+      PlayersArray[ObjID].active = true;
+      PlayersArray[ObjID].chekb.SetButtonOn();
+  }
+  
+  stage.update();
+}
+
+function DrawWinLine(l,t,r,b)
+{
+  let qsize = QuadFieldSize/QuadSequenceArr[CurrentQSequenceID].qsidecount;
+  
+  WinLine.obj.graphics.clear();
+  WinLine.obj.graphics.setStrokeStyle(10*Canvas_Scale).beginStroke("#ff00ff").moveTo( (QuadFieldX+qsize*l+qsize/2)*Canvas_Scale, (QuadFieldY+qsize*t+qsize/2)*Canvas_Scale)
+  .lineTo( (QuadFieldX+qsize*r+qsize/2)*Canvas_Scale, (QuadFieldY+qsize*b+qsize/2)*Canvas_Scale);
+  WinLine.lb = l;
+  WinLine.tb = t;
+  WinLine.rb = r;
+  WinLine.bb = b;  
+}
+
+function ComputerStep()
+{
+  CompStepActive = false;   
+  
+  if(StartGame == false)
+    return;
+  
+  if( (CurrentPlayerID >= PlayersArray.length)||(CurrentPlayerID < 0) )
+    return;
+  
+  if(PlayersArray[CurrentPlayerID].compIQ < 0)
+    PlayersArray[CurrentPlayerID].compIQ = 0;
+  else if(PlayersArray[CurrentPlayerID].compIQ >= CompIQLevelsArr.length)
+    PlayersArray[CurrentPlayerID].compIQ = CompIQLevelsArr.length-1;
+  
+  CompIQLevelsArr[ PlayersArray[CurrentPlayerID].compIQ ].func();
+}
+
+function ComputerStepLowIQ()
+{
+  let res = GetRandomEmptyField();
+  SetFigure(res.row, res.col);  
+}
+
+function ComputerStepMiddleIQ()
+{
+  CheckPossibleLineComb(); //оставляем в массиве комбинаций полей только с пустыми полями
+  
+  if(PossibleLineCombCopy.length == 0) //если в массиве нет пустых комбинаций
+  {    
+    if(MidIQIntermedData[CurrentPlayerID].length == 0) // и нет текущей выполняемой комбинации
+    {
+      let res = GetRandomEmptyField();//случайным образом выбираем поле
+      SetFigure(res.row, res.col); 
+    }
+    else
+    {
+      let randInd = Math.floor(Math.random() * MidIQIntermedData[CurrentPlayerID].length);
+      let res = MidIQIntermedData[CurrentPlayerID][randInd]; //если еще выполняется комбинация
+      MidIQIntermedData[CurrentPlayerID].splice(randInd,1);
+      if(QuadricsArr[res.row][res.col].ObjType != -1)//проверяем пустое поле или занято
+      {
+     	MidIQIntermedData[CurrentPlayerID].length = 0; //если поле занято, обнуляем комбинацию
+	let res = GetRandomEmptyField(); //и случайным образом определяем поле
+	SetFigure(res.row, res.col);
+      }
+      else
+      	SetFigure(res.row, res.col); //если поле не занято, ставим фигуру в очередное поле текущей комбинации
+    }
+  }
+  else
+  {  
+    if(MidIQIntermedData[CurrentPlayerID].length == 0) // если нет текущей выполняемой комбинации
+    {
+      let randInd = Math.floor(Math.random() * PossibleLineCombCopy.length); //выбмраем случайную комбинацию
+      MidIQIntermedData[CurrentPlayerID] = PossibleLineCombCopy[randInd].splice(0,PossibleLineCombCopy[randInd].length);
+      PossibleLineCombCopy.splice(randInd,1);         
+      randInd = Math.floor(Math.random() * MidIQIntermedData[CurrentPlayerID].length);      
+      let res = MidIQIntermedData[CurrentPlayerID][randInd];
+      MidIQIntermedData[CurrentPlayerID].splice(randInd,1);       
+      SetFigure(res.row, res.col);
+    }
+    else
+    {
+      let randInd = Math.floor(Math.random() * MidIQIntermedData[CurrentPlayerID].length);
+      let res = MidIQIntermedData[CurrentPlayerID][randInd];
+      MidIQIntermedData[CurrentPlayerID].splice(randInd,1);      
+      if(QuadricsArr[res.row][res.col].ObjType != -1)
+      {
+	MidIQIntermedData[CurrentPlayerID].length = 0;
+	let randInd = Math.floor(Math.random() * PossibleLineCombCopy.length);
+	MidIQIntermedData[CurrentPlayerID] = PossibleLineCombCopy[randInd].splice(0,PossibleLineCombCopy[randInd].length);
+	PossibleLineCombCopy.splice(randInd,1);	    
+	randInd = Math.floor(Math.random() * MidIQIntermedData[CurrentPlayerID].length);
+	res = MidIQIntermedData[CurrentPlayerID][randInd];
+	MidIQIntermedData[CurrentPlayerID].splice(randInd,1);      
+	SetFigure(res.row, res.col);	
+      }
+      else
+	SetFigure(res.row, res.col);
+    }
+  }
+}
+
+function ComputerStepHighIQ()
+{
+  let EnemyWinSituationsArr = new Array();
+  
+  GetEnemyWinSituations(EnemyWinSituationsArr);
+  
+  if(EnemyWinSituationsArr.length == 0)  
+     ComputerStepMiddleIQ();
+  else
+  {
+    let randInd = Math.floor(Math.random() * EnemyWinSituationsArr.length); //выбмраем случайную комбинацию
+    SetFigure(EnemyWinSituationsArr[randInd].row, EnemyWinSituationsArr[randInd].col);
+  }
+}
+
+function GetRandomEmptyField()
+{
+  let EmptyQArr = new Array();
+  
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+     if(QuadricsArr[r][c].ObjType == -1)
+      EmptyQArr[EmptyQArr.length] = {row: r, col: c};
+    }    
+  }
+  
+  let randInd = Math.floor(Math.random() * EmptyQArr.length);
+  
+  return EmptyQArr[randInd];
+}
+
+function CheckWin(ObjRow, ObjCol)
+{
+   if(!StartGame)
+    return;
+    
+  if( (CurrentPlayerID < 0)||(CurrentPlayerID >= PlayersArray.length) )
+    return false;
+  
+  let qsidecount = QuadSequenceArr[CurrentQSequenceID].qsidecount;
+  let qwincount = QuadSequenceArr[CurrentQSequenceID].qwincount;
+  
+  let QCheckedBoarders = {lb: ObjCol-qwincount+1, rb: ObjCol+qwincount-1, tb: ObjRow-qwincount+1, bb: ObjRow+qwincount-1};
+  if(QCheckedBoarders.lb < 0)
+    QCheckedBoarders.lb = 0;
+  if(QCheckedBoarders.rb >= qsidecount)
+    QCheckedBoarders.rb = qsidecount-1; 
+  if(QCheckedBoarders.tb < 0)
+    QCheckedBoarders.tb = 0;
+  if(QCheckedBoarders.bb >= qsidecount)
+    QCheckedBoarders.bb  = qsidecount-1;
+  
+  let findfigcount = 0;
+  //проверяем есть ли подряд несколько фигур по горизонтали
+  for(let i = QCheckedBoarders.lb; i <= QCheckedBoarders.rb; i++)
+  {
+    if(QuadricsArr[ObjRow][i].ObjType == CurrentPlayerID)
+      findfigcount++;
+    else
+      findfigcount = 0;
+    
+    if(findfigcount == qwincount)
+    {
+      DrawWinLine(i-qwincount+1,ObjRow,i,ObjRow);
+      SetPlayerWin(CurrentPlayerID);
+      return true;
+    }
+  }
+  
+  findfigcount = 0;
+  //проверяем есть ли подряд несколько фигур по вертикали
+  for(let i = QCheckedBoarders.tb; i <= QCheckedBoarders.bb; i++)
+  {
+    if(QuadricsArr[i][ObjCol].ObjType == CurrentPlayerID)
+      findfigcount++;
+    else
+      findfigcount = 0;
+    
+    if(findfigcount == qwincount)
+    {
+      DrawWinLine(ObjCol,i-qwincount+1,ObjCol,i);
+      SetPlayerWin(CurrentPlayerID);      
+      return true;
+    }
+  }
+  
+  //проверяем есть ли подряд несколько фигур по диагонали верх-лев-нижн-прав
+  QCheckedBoarders.lb = ObjCol;
+  QCheckedBoarders.rb = ObjCol;
+  QCheckedBoarders.tb = ObjRow;
+  QCheckedBoarders.bb = ObjRow; 
+  
+  for(let i = 1; i < qwincount; i++)
+  {
+    let lb = QCheckedBoarders.lb-1;
+    let tb = QCheckedBoarders.tb-1;
+    
+    if( ( lb >= 0)&&( tb >= 0) )
+    {
+      QCheckedBoarders.lb = lb;
+      QCheckedBoarders.tb = tb;
+    }
+    
+    let rb = QCheckedBoarders.rb+1;
+    let bb = QCheckedBoarders.bb+1;
+    
+    if( ( rb < qsidecount)&&( bb < qsidecount) )
+    {
+      QCheckedBoarders.rb = rb;
+      QCheckedBoarders.bb = bb;
+    }
+  }
+  
+  findfigcount = 0;
+ 
+  let j = QCheckedBoarders.tb;
+  for(let i = QCheckedBoarders.lb; i <= QCheckedBoarders.rb; i++)
+  {
+    if(QuadricsArr[j][i].ObjType == CurrentPlayerID)
+      findfigcount++;
+    else
+      findfigcount = 0;
+    
+    if(findfigcount == qwincount)
+    {
+      DrawWinLine(i-qwincount+1,j-qwincount+1,i,j);
+      SetPlayerWin(CurrentPlayerID);      
+      return true;
+    }
+    
+    j++;
+  }
+  
+  //проверяем есть ли подряд несколько фигур по диагонали нижн-лев-верх-прав
+  QCheckedBoarders.lb = ObjCol;
+  QCheckedBoarders.rb = ObjCol;
+  QCheckedBoarders.tb = ObjRow;
+  QCheckedBoarders.bb = ObjRow; 
+  
+  for(let i = 1; i < qwincount; i++)
+  {
+    let lb = QCheckedBoarders.lb-1;
+    let bb = QCheckedBoarders.bb+1;
+    
+    if( ( lb >= 0)&&( bb < qsidecount) )
+    {
+      QCheckedBoarders.lb = lb;
+      QCheckedBoarders.bb = bb;
+    }
+    
+    let rb = QCheckedBoarders.rb+1;
+    let tb = QCheckedBoarders.tb-1;
+    
+    if( ( rb < qsidecount)&&( tb >= 0) )
+    {
+      QCheckedBoarders.rb = rb;
+      QCheckedBoarders.tb = tb;
+    }
+  }
+  
+  findfigcount = 0;
+ 
+  j = QCheckedBoarders.bb;
+  for(let i = QCheckedBoarders.lb; i <= QCheckedBoarders.rb; i++)
+  {
+    if(QuadricsArr[j][i].ObjType == CurrentPlayerID)
+      findfigcount++;
+    else
+      findfigcount = 0;
+    
+    if(findfigcount == qwincount)
+    {
+      DrawWinLine(i-qwincount+1,j+qwincount-1,i,j);
+      SetPlayerWin(CurrentPlayerID);      
+      return true;
+    }
+    
+    j--;
+  }
+  
+  let quemptycount = 0;
+  
+  for(let r = 0; r < QuadricsArr.length; r++)
+  {
+    for(let c = 0; c < QuadricsArr[r].length; c++)
+    {
+     if(QuadricsArr[r][c].ObjType == -1)
+      quemptycount++;
+    }    
+  }
+  
+  if(quemptycount == 0)
+  {
+    SetPlayerWin(-1);      
+    return true;
+  }
+  
+  return false;
+}
+
+function GetEnemyWinSituations(arr)
+{
+  arr.length = 0;
+  
+  let EnemiesIDArr = new Array();
+  let ind = 0;
+  for(let i = 0; i < PlayersArray.length; i++)
+  {
+    if( (PlayersArray[i].active)&&(i != CurrentPlayerID) )
+    {
+      EnemiesIDArr[ind] = {enid: i, count: 0}; 
+      ind++;
+    }
+  }
+  
+  
+  for(let i = 0; i < PossibleLineComb.length; i++)
+  {
+    let emptyfield = {row: -1, col: -1};
+    for(let i = 0; i < EnemiesIDArr.length; i++)
+    {
+      EnemiesIDArr[i].count = 0;
+    }
+    
+    for(let j = 0; j < PossibleLineComb[i].length; j++)
+    {
+      let ObjTp = QuadricsArr[ PossibleLineComb[i][j].row ][ PossibleLineComb[i][j].col ].ObjType;
+      if(ObjTp == -1)
+      {
+	emptyfield.row = PossibleLineComb[i][j].row;
+	emptyfield.col = PossibleLineComb[i][j].col;
+      }
+      else
+      {
+	for(let i = 0; i < EnemiesIDArr.length; i++)
+	{
+	  if( EnemiesIDArr[i].enid == ObjTp )
+	    EnemiesIDArr[i].count++;
+	}
+      }
+    }
+    
+    for(let i = 0; i < EnemiesIDArr.length; i++)
+    {
+      if( (EnemiesIDArr[i].count == QuadSequenceArr[CurrentQSequenceID].qwincount-1)&&(emptyfield.row != -1)&&(emptyfield.col != -1) )
+      {
+	arr[arr.length] = {row: emptyfield.row, col: emptyfield.col};
+      }
+    }
+  }
+}
+
+function SetPlayerWin(playerid)
+{
+  if(playerid == -1)
+    WhoseMoveTxt.OnSetText("Победила дружба!");
+  else
+  {
+    WhoseMoveTxt.OnSetText("Победил "+PlayersArray[playerid].title);
+    PlayersArray[playerid].winscount++;
+    PlayersArray[playerid].resdisp.DisplayAnswersNum(PlayersArray[playerid].winscount);
+    WinLine.obj.visible = true;
+  }
+  
+  StartGame = false;    
+  stage.update();
+}
+
+function SetListPosition(ListID, selID)
+{
+  if( (ListID<0)||(ListID>=PlayersArray.length))
+    return;
+   
+  if( (PlayersArray[ListID].active)&&(StartGame == true) )
+    ResetGame();
+   
+  if(selID == 0)
+  {
+    PlayersArray[ListID].comp = false;
+    PlayersArray[ListID].compIQ = 0;
+  }
+  else
+  {
+    PlayersArray[ListID].comp = true;
+    PlayersArray[ListID].compIQ = selID-1;    
+  }
+    
+  stage.update();
+}
+
+</script>
+</head>
+<body onload="init();">
+ <div align = 'center'><canvas id="DrawingCanvas" width="1280" height="720"></canvas></div>
+ <div class = "htmllayer">
+   <div  id = "hlpvid">
+   <video width="1200" height="600" controls="controls">
+    <source src="CZTQ/HelpVideo.ogv" type='video/ogg; codecs="theora, vorbis"'>
+    <source src="CZTQ/HelpVideo.mp4" type='video/mp4; codecs="avc1.42E01E, mp4a.40.2"'>
+    <source src="CZTQ/HelpVideo.webm" type='video/webm; codecs="vp8, vorbis"'>
+    Тег video не поддерживается вашим браузером.
+  </video> 
+ </div>
+ </div>
+</body>
+</html>
